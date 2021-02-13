@@ -1,0 +1,3 @@
+include ':app'
+include ':modelasset'
+rootProject.name = "Automated Spoken Language Detector"
