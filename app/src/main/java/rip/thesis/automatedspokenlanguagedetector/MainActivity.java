@@ -40,11 +40,13 @@ public class MainActivity extends AppCompatActivity {
     FloatingActionButton buttonStart, buttonStop, buttonPlayLastRecordAudio;
     TextView displayedText, progressBarText;
     ProgressBar progressBar;
-    String audioSavePathInDevice = null;
-    String wavFile = null;
+    CountDownTimer countDownTimer;
+
+    String audioSavePathInDevice, wavFile;
     MediaRecorder mediaRecorder ;
     public static final int RequestPermissionCode = 1;
     MediaPlayer mediaPlayer ;
+
     private void copyFile(InputStream in, OutputStream out) throws IOException {
         byte[] buffer = new byte[1024];
         int read;
@@ -57,15 +59,18 @@ public class MainActivity extends AppCompatActivity {
 
         public CountDownTimer(long millisInFuture, long countDownInterval) {
             super(millisInFuture, countDownInterval);
-            progressBar.setMax((int) millisInFuture/100);
+            progressBar.setMax((int) millisInFuture/120);
             progressBar.setProgress(0);
         }
 
         @Override
         public void onTick(long millisUntilFinished) {
             progressBar.incrementProgressBy(1);
-            String progressText = "Loaded in " + String.format("%.2f", (Math.random() +
-                    progressBar.getProgress())/progressBar.getMax()*255) + "MB of 255MB trained model";
+            double progress = (Math.random() + progressBar.getProgress())/progressBar.getMax()*255;
+            String progressText = "Loaded in 255MB of 255MB trained model \n Warming up Tensors";;
+            if (progress < 255) progressText = "Loaded in " + String.format("%.2f", progress)
+                    + "MB of 255MB trained model";;
+
 //            String progressText = String.valueOf(progressBar.getProgress());
             progressBarText.setText(progressText);
         }
@@ -103,110 +108,99 @@ public class MainActivity extends AppCompatActivity {
         displayedText.setVisibility(View.INVISIBLE);
         displayedText.setText("Record someone talking and I'll tell you the language");
 
-
-        CountDownTimer countDownTimer = new CountDownTimer(15000, 100);
-        countDownTimer.start();
-
-
-
         String dirPath = getFilesDir().getAbsolutePath() + "/oneTimeTestDatabase";
         audioSavePathInDevice = dirPath + "/audioFile.m4a";
         wavFile = dirPath + "/wavFile.wav";
+        File projDir = new File(dirPath);
 
 
+        if(!checkPermission()) {
+            requestPermission();
+        }
+        else{
+            new Thread(() -> {
 
-
-
-        new Thread(() -> {
-            File projDir = new File(dirPath);
-            if (!projDir.exists()) {
-                projDir.mkdirs();
-
-                AssetManager assetManager = getAssets();
-                String[] files = null;
-                try {
-                    files = assetManager.list("");
-                } catch (IOException e) {
-                    e.printStackTrace();
+                if (! Python.isStarted()) {
+                    Python.start(new AndroidPlatform(this));
                 }
-                if (files != null) for (String filename : files) {
-                    InputStream in = null;
-                    OutputStream out = null;
+                Python py = Python.getInstance();
+                PyObject pythonScript = py.getModule("PyScriptForApp");
+                if (!projDir.exists()) {
+                    projDir.mkdirs();
+
+                    AssetManager assetManager = getAssets();
+                    String[] files = null;
                     try {
-                        in = assetManager.open(filename);
-                        File outFile = new File(dirPath, filename);
-                        out = new FileOutputStream(outFile);
-                        copyFile(in, out);
-                    } catch(IOException e) {
+                        files = assetManager.list("");
+                    } catch (IOException e) {
                         e.printStackTrace();
                     }
-                    finally {
-                        if (in != null) {
-                            try {
-                                in.close();
-                            } catch (IOException e) {
-                                e.printStackTrace();
-                            }
+                    if (files != null) for (String filename : files) {
+                        InputStream in = null;
+                        OutputStream out = null;
+                        try {
+                            in = assetManager.open(filename);
+                            File outFile = new File(dirPath, filename);
+                            out = new FileOutputStream(outFile);
+                            copyFile(in, out);
+                        } catch(IOException e) {
+                            e.printStackTrace();
                         }
-                        if (out != null) {
-                            try {
-                                out.close();
-                            } catch (IOException e) {
-                                e.printStackTrace();
+                        finally {
+                            if (in != null) {
+                                try {
+                                    in.close();
+                                } catch (IOException e) {
+                                    e.printStackTrace();
+                                }
+                            }
+                            if (out != null) {
+                                try {
+                                    out.close();
+                                } catch (IOException e) {
+                                    e.printStackTrace();
+                                }
                             }
                         }
                     }
                 }
-            }
-            if (! Python.isStarted()) {
-                Python.start(new AndroidPlatform(this));
-            }
-            Python py = Python.getInstance();
-            PyObject pythonScript = py.getModule("PyScriptForApp");
-            pythonScript.callAttr("pythonClassify", dirPath + "/EasterEgg.wav",
-                    dirPath + "/model.tflite");
+                pythonScript.callAttr("pythonClassify", dirPath + "/EasterEgg.wav",
+                        dirPath + "/model.tflite");
 
-            progressBar.post(() -> progressBar.setProgress(100));
-            progressBar.post(() -> progressBar.setVisibility(View.INVISIBLE));
-            progressBarText.post(() -> progressBarText.setVisibility(View.INVISIBLE));
-            displayedText.post(() -> displayedText.setVisibility(View.VISIBLE));
-            buttonStart.post(() -> buttonStart.setEnabled(true));
-            buttonStart.post(() -> buttonStart.setAlpha(1f));
-        }).start();
-
-
-
-
+                progressBar.post(() -> progressBar.setProgress(100));
+                progressBar.post(() -> progressBar.setVisibility(View.INVISIBLE));
+                progressBarText.post(() -> progressBarText.setVisibility(View.INVISIBLE));
+                displayedText.post(() -> displayedText.setVisibility(View.VISIBLE));
+                buttonStart.post(() -> buttonStart.setEnabled(true));
+                buttonStart.post(() -> buttonStart.setAlpha(1f));
+            }).start();
+            countDownTimer = new CountDownTimer(20000, 100);
+            countDownTimer.start();
+        }
 
         buttonStart.setOnClickListener(view -> {
 
-            if(checkPermission()) {
 
+            MediaRecorderReady();
 
+            try {
+                mediaRecorder.prepare();
+                mediaRecorder.start();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
 
-                MediaRecorderReady();
-
-                try {
-                    mediaRecorder.prepare();
-                    mediaRecorder.start();
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-
-                buttonStart.setEnabled(false);
-                buttonStart.setAlpha(0.25f);
-                buttonStop.setEnabled(true);
-                buttonStop.setAlpha(1f);
-                buttonPlayLastRecordAudio.setEnabled(false);
-                buttonPlayLastRecordAudio.setAlpha(0.25f);
+            buttonStart.setEnabled(false);
+            buttonStart.setAlpha(0.25f);
+            buttonStop.setEnabled(true);
+            buttonStop.setAlpha(1f);
+            buttonPlayLastRecordAudio.setEnabled(false);
+            buttonPlayLastRecordAudio.setAlpha(0.25f);
 
 
 
 //                    Toast.makeText(MainActivity.this, "Recording started",
 //                            Toast.LENGTH_LONG).show();
-            } else {
-                requestPermission();
-            }
 
         });
 
@@ -290,7 +284,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void requestPermission() {
         ActivityCompat.requestPermissions(MainActivity.this, new
-                String[]{WRITE_EXTERNAL_STORAGE, RECORD_AUDIO}, RequestPermissionCode);
+                String[]{RECORD_AUDIO}, RequestPermissionCode);
     }
 
     @Override
@@ -298,14 +292,73 @@ public class MainActivity extends AppCompatActivity {
                                            @NonNull String[] permissions, int[] grantResults) {
         if (requestCode == RequestPermissionCode) {
             if (grantResults.length > 0) {
-                boolean StoragePermission = grantResults[0] ==
-                        PackageManager.PERMISSION_GRANTED;
-                boolean RecordPermission = grantResults[1] ==
+
+                boolean RecordPermission = grantResults[0] ==
                         PackageManager.PERMISSION_GRANTED;
 
-                if (StoragePermission && RecordPermission) {
+                if (RecordPermission) {
                     Toast.makeText(MainActivity.this, "Permission Granted",
                             Toast.LENGTH_LONG).show();
+                    new Thread(() -> {
+                        if (! Python.isStarted()) {
+                            Python.start(new AndroidPlatform(this));
+                        }
+                        Python py = Python.getInstance();
+                        PyObject pythonScript = py.getModule("PyScriptForApp");
+                        String dirPath = getFilesDir().getAbsolutePath() + "/oneTimeTestDatabase";
+
+                        File projDir = new File(dirPath);
+                        if (!projDir.exists()) {
+                            projDir.mkdirs();
+
+                            AssetManager assetManager = getAssets();
+                            String[] files = null;
+                            try {
+                                files = assetManager.list("");
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                            }
+                            if (files != null) for (String filename : files) {
+                                InputStream in = null;
+                                OutputStream out = null;
+                                try {
+                                    in = assetManager.open(filename);
+                                    File outFile = new File(dirPath, filename);
+                                    out = new FileOutputStream(outFile);
+                                    copyFile(in, out);
+                                } catch(IOException e) {
+                                    e.printStackTrace();
+                                }
+                                finally {
+                                    if (in != null) {
+                                        try {
+                                            in.close();
+                                        } catch (IOException e) {
+                                            e.printStackTrace();
+                                        }
+                                    }
+                                    if (out != null) {
+                                        try {
+                                            out.close();
+                                        } catch (IOException e) {
+                                            e.printStackTrace();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        pythonScript.callAttr("pythonClassify", dirPath + "/EasterEgg.wav",
+                                dirPath + "/model.tflite");
+
+                        progressBar.post(() -> progressBar.setProgress(100));
+                        progressBar.post(() -> progressBar.setVisibility(View.INVISIBLE));
+                        progressBarText.post(() -> progressBarText.setVisibility(View.INVISIBLE));
+                        displayedText.post(() -> displayedText.setVisibility(View.VISIBLE));
+                        buttonStart.post(() -> buttonStart.setEnabled(true));
+                        buttonStart.post(() -> buttonStart.setAlpha(1f));
+                    }).start();
+                    countDownTimer = new CountDownTimer(30000, 100);
+                    countDownTimer.start();
                 } else {
                     Toast.makeText(MainActivity.this, "Permission " +
                             "Denied", Toast.LENGTH_LONG).show();
@@ -315,11 +368,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public boolean checkPermission() {
-        int result = ContextCompat.checkSelfPermission(getApplicationContext(),
-                WRITE_EXTERNAL_STORAGE);
-        int result1 = ContextCompat.checkSelfPermission(getApplicationContext(),
+         int result = ContextCompat.checkSelfPermission(getApplicationContext(),
                 RECORD_AUDIO);
-        return result == PackageManager.PERMISSION_GRANTED &&
-                result1 == PackageManager.PERMISSION_GRANTED;
+        return result == PackageManager.PERMISSION_GRANTED;
     }
 }

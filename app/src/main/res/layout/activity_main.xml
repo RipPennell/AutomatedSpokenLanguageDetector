@@ -101,6 +101,7 @@
         android:layout_height="wrap_content"
         android:layout_below="@id/progressBar"
         android:layout_centerHorizontal="true"
-        android:text="TextView" />
+        android:text="Please close app, accept permission, and restart"
+        android:textAlignment="center" />
 
 </RelativeLayout>
